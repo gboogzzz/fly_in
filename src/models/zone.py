@@ -18,7 +18,7 @@ class ZoneType(Enum):
     PRIORITY = "priority"
 
     @classmethod
-    def from_string(cls, value: str) -> ZoneType:
+    def from_string(cls, value: str) -> "ZoneType":
         for zone in ZoneType:
             if zone.value == value:
                 return zone
@@ -26,7 +26,8 @@ class ZoneType(Enum):
 
     def movement_cost(self) -> int:
         if self == ZoneType.BLOCKED:
-            raise InaccessibleZoneError("zona blocked não tem custo — é inválida")
+            raise InaccessibleZoneError("blocked zone doesnt have coust\
+            — is invalid")
         elif self == ZoneType.RESTRICTED:
             return 2
         else:
@@ -53,8 +54,9 @@ class Zone:
         if self.max_drones < 1:
             raise ValueError("max_drones needs to be an integer and positive")
         if "-" in self.name or " " in self.name:
-            raise ValueError(f"invalid '{self.name}' name: cant have '-' or spaces")
-    
+            raise ValueError(f"invalid '{self.name}' name:"
+                             "cant have '-' or spaces")
+
     def __hash__(self) -> int:
         return hash(self.name)
 

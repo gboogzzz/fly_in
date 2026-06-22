@@ -16,11 +16,12 @@ class Connection:
         if self.zone1 == self.zone2:
             raise InvalidConnectionError("The zone cant connect to itself")
         if self.max_link_capacity < 1:
-            raise InvalidConnectionError("max link capacity needs to be positive")
-        
-    def __hash__ (self) -> int:
+            raise InvalidConnectionError("max link capacity needs \
+            to be positive")
+
+    def __hash__(self) -> int:
         return hash(frozenset({self.zone1.name, self.zone2.name}))
-    
+
     def __eq__(self, other: object) -> bool:
         if not isinstance(other, Connection):
             return NotImplemented
@@ -28,7 +29,6 @@ class Connection:
             {self.zone1.name, self.zone2.name} ==
             {other.zone1.name, other.zone2.name}
         )
-    
+
     def involves(self, zone: Zone) -> bool:
         return zone == self.zone1 or zone == self.zone2
-    
