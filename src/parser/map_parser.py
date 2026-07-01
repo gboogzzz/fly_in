@@ -4,7 +4,7 @@ from typing import Optional
 
 class ParseError(Exception):
     def __init__(self, line_number: int, message: str):
-        print(f"Error on line {line_number}, {message}")
+        super().__init__(f"Error on line {line_number}: {message}")
 
 
 class MapParser:
@@ -92,7 +92,7 @@ class MapParser:
         except ValueError:
             raise ParseError(line_number, "invalid coords")
         if extra:
-            extra_parsed = MapParser._parse_meta_data(extra)
+            extra_parsed = MapParser._parse_meta_data(extra, line_number)
             types = ["normal", "blocked", "restricted", "priority"]
             if extra_parsed.get("zone", "normal") not in types:
                 raise ParseError(line_number, "zone_type invalid")
@@ -136,7 +136,7 @@ class MapParser:
         except ZoneNotFoundError:
             raise ParseError(line_number, "unknown zone")
         if extra:
-            extra_parsed = MapParser._parse_meta_data(extra)
+            extra_parsed = MapParser._parse_meta_data(extra, line_number)
             max_link_capacity = extra_parsed.get("max_link_capacity")
             try:
                 max_link_capacity = int(max_link_capacity)
@@ -157,10 +157,15 @@ class MapParser:
 
 
     @staticmethod
-    def _parse_metadata(metadata_str: str, line_number: int) -> dict[str, str]:
+    def _parse_meta_data(metadata_str: str, line_number: int) -> dict[str, str]:
         metadata_str = metadata_str.strip("[]")
         meta_data = metadata_str.split(" ")
         parsed_data = {}
         for data in meta_data:
-            key = data.split("=", 1)[0]
-            parsed_data[key] = data.split("=", 1)[1]
+            temp = data.split("=", 1)
+            if len(temp) < 2:
+                raise ParseError(line_number, "mal formed meta data")
+            key = temp[0]
+            parsed_data[key] = temp[1]
+        
+        return parsed_data

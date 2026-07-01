@@ -2,7 +2,7 @@
 
 ## Estado Atual
 
-Fase 1 em progresso — `src/models/` completa, `src/parser/` por iniciar.
+Fase 1 completa — `src/models/` e `src/parser/` implementados e testados.
 
 ---
 
@@ -39,22 +39,22 @@ O `@dataclass` gera o `__init__` automaticamente. O `__post_init__` é o único 
 # Decisões de design chave
 @dataclass
 class Zone:
-    name: str       # obrigatório — sem default
-    x: int          # obrigatório — sem default
-    y: int          # obrigatório — sem default
-    zone_type: ZoneType = ZoneType.NORMAL  # com default — vem depois
+    name: str
+    x: int
+    y: int
+    zone_type: ZoneType = ZoneType.NORMAL
     max_drones: int = 1
     color: Optional[str] = None
     is_start: bool = False
     is_end: bool = False
 
     def __hash__(self) -> int:
-        return hash(self.name)  # name é único — garantido pelo parser
+        return hash(self.name)
 
     def __eq__(self, other: object) -> bool:
         if not isinstance(other, Zone):
             return NotImplemented
-        return self.name == other.name  # só o name importa
+        return self.name == other.name
 ```
 
 ---
@@ -70,34 +70,16 @@ Uma connection é bidirecional — `hub→roof1` e `roof1→hub` são a mesma li
 Dentro do `__eq__` só estamos a comparar dois sets entre si, não a hashear — por isso não precisamos de imutabilidade. `{A,B} == {B,A}` funciona com `set` normal.
 
 **Porquê redefinir `__eq__`:**
-O `@dataclass` gera um `__eq__` que compara campo a campo — `zone1 == zone1` e `zone2 == zone2`. Isso significa que `hub→roof1 ≠ roof1→hub`. Mas são a mesma ligação, logo temos de redefinir.
+O `@dataclass` gera um `__eq__` que compara campo a campo. Isso significa que `hub→roof1 ≠ roof1→hub`. Mas são a mesma ligação, logo temos de redefinir.
 
 **Porquê `NotImplemented` em vez de `False`:**
-Quando `other` não é uma `Connection`, retornar `NotImplemented` diz ao Python para tentar o outro lado da comparação — permite que subclasses funcionem corretamente. `False` terminaria a comparação imediatamente.
-
-**Porquê o método `involves`:**
-O engine precisa de saber se um drone está a atravessar uma connection específica para verificar `max_link_capacity`. O `involves` encapsula essa lógica dentro da classe — o engine não precisa de saber que existem `zone1` e `zone2`.
+Quando `other` não é uma `Connection`, retornar `NotImplemented` diz ao Python para tentar o outro lado da comparação — permite que subclasses funcionem corretamente.
 
 **Conceitos aprendidos:**
 - `frozenset` vs `set` — imutabilidade e hashability
 - `isinstance` para type checking seguro no `__eq__`
 - `NotImplemented` vs `False` em comparações
 - Bidirecionalidade e como representá-la
-
-```python
-# Decisões de design chave
-def __hash__(self) -> int:
-    return hash(frozenset({self.zone1.name, self.zone2.name}))
-    # frozenset — sem ordem, imutável, pode ser hasheado
-
-def __eq__(self, other: object) -> bool:
-    if not isinstance(other, Connection):
-        return NotImplemented  # não False — permite herança
-    return (
-        {self.zone1.name, self.zone2.name} ==
-        {other.zone1.name, other.zone2.name}
-    )  # set normal chega — só comparamos, não hasheamos
-```
 
 ---
 
@@ -106,16 +88,10 @@ def __eq__(self, other: object) -> bool:
 **O que faz:** Representa um drone individual na simulação com o seu estado, posição e caminho.
 
 **Porquê `Enum` para `DroneState`:**
-Um drone só pode estar num estado de cada vez. Com booleanos separados (`is_moving`, `is_waiting`, etc.) seria possível ter estados contraditórios. Com `Enum` é impossível — um único atributo `state: DroneState`.
+Um drone só pode estar num estado de cada vez. Com booleanos separados seria possível ter estados contraditórios. Com `Enum` é impossível.
 
 **Porquê `field(default_factory=list)` para `path`:**
-Em Python, usar `path: List[Zone] = []` numa dataclass criaria uma única lista partilhada entre todos os objetos `Drone`. Todos os drones estariam a escrever no mesmo caminho — um bug catastrófico e difícil de encontrar. O `field(default_factory=list)` cria uma lista nova e independente para cada instância.
-
-**Porquê `@property` para `label` e `has_arrived`:**
-`@property` transforma um método num atributo calculado — chamas `drone.label` sem parênteses. Para `label` é conveniente porque o formato `"D1"` é derivado do `drone_id`. Para `has_arrived` torna o código do engine mais legível do que comparar `drone.state == DroneState.ARRIVED` diretamente.
-
-**Porquê `transit_destination`:**
-Quando um drone entra em `IN_TRANSIT` (a caminho de uma zona `restricted`), precisa de guardar para onde vai — no turno seguinte o engine usa esta informação para mover o drone para o destino. Volta a `None` quando chega.
+Usar `path: List[Zone] = []` numa dataclass criaria uma única lista partilhada entre todos os objetos `Drone`. O `field(default_factory=list)` cria uma lista nova e independente para cada instância.
 
 **Conceitos aprendidos:**
 - `Enum` para estados mutuamente exclusivos
@@ -123,39 +99,16 @@ Quando um drone entra em `IN_TRANSIT` (a caminho de uma zona `restricted`), prec
 - `@property` para atributos calculados
 - `Optional[Zone]` para valores que podem ser `None`
 
-```python
-# Decisões de design chave
-state: DroneState = DroneState.WAITING
-# Enum — impossível ter dois estados ao mesmo tempo
-
-path: List[Zone] = field(default_factory=list)
-# default_factory — lista independente por instância
-
-@property
-def label(self) -> str:
-    return f"D{self.drone_id}"
-# property — parece atributo, é código calculado
-```
-
 ---
 
-### graph.py ✓
+### graphs.py ✓
 
 **O que faz:** Contentor da rede completa — zonas, ligações e adjacency list. Construído pelo parser e passado ao pathfinder e ao engine.
 
-**Porquê três estruturas internas:**
-- `_zones: Dict[str, Zone]` — encontrar uma zona pelo nome em O(1). O parser precisa disto quando lê `connection: hub-roof1` — tem de encontrar os objetos `Zone` rapidamente.
-- `_neighbours: Dict[Zone, List[Zone]]` — a adjacency list. O pathfinder chama `get_neighbors` a cada passo do algoritmo — tem de ser rápido.
-- `_connections: Set[Connection]` — todas as ligações. O `set` usa `__hash__` e `__eq__` do `Connection` para detetar duplicatas automaticamente. O engine percorre isto para verificar `max_link_capacity`.
-
-**Porquê atributos privados com `_`:**
-Os atributos internos só devem ser modificados pelos métodos `add_zone` e `add_connection`, que têm validações. Se fossem públicos, código externo podia modificá-los sem validação. O underscore é uma convenção — não é privacidade forçada, mas sinaliza a intenção.
-
-**Porquê `Optional[Zone]` para `_start_zone` e `_end_zone`:**
-Quando o `Graph` é criado está vazio — o parser define estas zonas depois. Antes de serem definidas o valor é `None`. As properties `start_zone` e `end_zone` protegem o acesso — lançam `ValueError` se forem acedidas antes de estarem definidas.
-
-**Porquê verificar `is_accessible()` em `add_connection`:**
-A adjacency list só deve conter zonas acessíveis como vizinhos. Se uma zona `BLOCKED` fosse adicionada como vizinho, o pathfinder teria de a filtrar em cada passo. É mais eficiente filtrar uma vez em `add_connection`.
+**Três estruturas internas:**
+- `_zones: Dict[str, Zone]` — O(1) lookup por nome
+- `_neighbours: Dict[Zone, List[Zone]]` — adjacency list para o pathfinder
+- `_connections: Set[Connection]` — sem duplicatas automático
 
 **Conceitos aprendidos:**
 - Adjacency list como estrutura de grafo
@@ -163,40 +116,93 @@ A adjacency list só deve conter zonas acessíveis como vizinhos. Se uma zona `B
 - `@property` para acesso controlado com validação
 - O(1) lookup com dicionários vs O(n) com listas
 
+---
+
+### src/models/__init__.py ✓
+
+**O que faz:** Re-exporta todas as classes do package para que outros módulos possam importar de `src.models` diretamente.
+
+**Decisões de design:**
+- Imports relativos com `.` — importa do mesmo package
+- `__all__` como lista de strings — define a interface pública do módulo
+
 ```python
-# Estruturas internas — decisão de design central
-self._zones: Dict[str, Zone] = {}             # O(1) lookup por nome
-self._neighbours: Dict[Zone, List[Zone]] = {} # adjacency list
-self._connections: Set[Connection] = set()    # sem duplicatas automático
-self._start_zone: Optional[Zone] = None       # definida pelo parser
-self._end_zone: Optional[Zone] = None         # definida pelo parser
+from .connection import Connection
+from .drone import Drone, DroneState
+from .graphs import Graph
+from .zone import Zone, ZoneType
+
+__all__ = [
+    "Connection",
+    "Drone",
+    "DroneState",
+    "Graph",
+    "Zone",
+    "ZoneType"
+]
 ```
+
+---
+
+## src/parser/ ✓ Completo
+
+### map_parser.py ✓
+
+**O que faz:** Lê um ficheiro de mapa linha a linha, valida o conteúdo, constrói e devolve um `Graph` populado e o número de drones.
+
+**Interface pública:**
+```python
+MapParser.parse(path: str) -> tuple[Graph, int]
+```
+
+**Estrutura interna:**
+- `parse()` — orquestra a leitura e devolve `(graph, nb_drones)`
+- `_parse_nb_drones()` — extrai e valida o número de drones
+- `_parse_zone()` — cria objetos `Zone` e adiciona ao grafo
+- `_parse_connection()` — cria objetos `Connection` e adiciona ao grafo
+- `_parse_meta_data()` — extrai pares `key=value` dos blocos `[...]`
+- `ParseError` — exceção com número de linha e causa
+
+**Decisões de design:**
+- `@staticmethod` em todos os métodos — o parser não tem estado próprio
+- `MapParser.parse()` constrói e devolve o `Graph` diretamente — a `main` só orquestra
+- Defaults inicializados antes do `if "[" in value` — evita `NameError` quando não há metadata
+- `try/except ValueError` para aceder a `graph.start_zone` e `graph.end_zone` — as properties lançam exceção se não definidas
+- `ZoneType.from_string()` para converter strings do ficheiro para o Enum antes de criar a `Zone`
+- `graph.get_connection()` para verificar duplicados antes de adicionar
+
+**Validações implementadas:**
+- `nb_drones` ausente, não inteiro, ou não positivo
+- `start_hub` ou `end_hub` ausentes
+- Prefixo desconhecido
+- Nome de zona com `-` ou espaço
+- Coordenadas não inteiras
+- `zone_type` inválido
+- `max_drones` não positivo
+- Zona duplicada
+- Zona desconhecida numa connection
+- Connection duplicada
+- `max_link_capacity` não positivo
+- Metadata mal formada (par sem `=`)
+
+**Conceitos aprendidos:**
+- `enumerate(f, start=1)` para iterar com número de linha
+- `not line` para verificar string vazia (mais idiomático que `len(line) == 0`)
+- `split(":", 1)` — split com limite para não partir valores que contenham `:`
+- `dict.get(key, default)` para valores opcionais com default
+- Imports relativos com `..` para subir um nível no package
+- `super().__init__()` em exceções customizadas para propagar a mensagem
+- `if __name__ == "__main__"` para evitar execução ao importar
+
+**Casos de erro testados:**
+- `nb_drones` negativo → `Error on line 1: the value of nb_drones needs to be positive`
+- Ficheiro válido → parser constrói grafo corretamente com todas as zonas e tipos
 
 ---
 
 ## Passos Seguintes
 
-### Fase 1 — Em curso
-
-#### src/parser/ ← próximo
-```
-src/parser/
-├── __init__.py
-├── map_parser.py   ← lê o ficheiro e constrói o Graph
-└── validators.py   ← validações isoladas reutilizáveis
-```
-
-O `map_parser.py` vai:
-1. Abrir o ficheiro com context manager (`with open(...)`)
-2. Ler linha a linha, ignorar comentários (`#`) e linhas vazias
-3. Identificar o tipo de cada linha pelo prefixo (`nb_drones:`, `start_hub:`, `hub:`, `connection:`)
-4. Extrair nome, coordenadas e metadados de cada zona
-5. Criar objetos `Zone` e `Connection` e adicioná-los ao `Graph`
-6. Lançar `ParseError` com número de linha e causa em caso de erro
-
----
-
-### Fase 2 — Por iniciar
+### Fase 2 — Pathfinding ← próximo
 
 ```
 src/pathfinding/
@@ -206,33 +212,50 @@ src/pathfinding/
 └── router.py       ← distribui drones por múltiplos caminhos
 ```
 
-O Dijkstra vai usar `graph.get_neighbors()` e `zone.zone_type.movement_cost()` para encontrar o caminho de menor custo. O router vai usar K paths para distribuir drones em paralelo e minimizar turnos.
+**O que implementar:**
+
+`dijkstra.py` — encontra o caminho de menor custo entre `start_zone` e `end_zone`:
+- Usa `graph.get_neighbors()` para explorar vizinhos
+- Usa `zone.zone_type.movement_cost()` para o custo de cada passo
+- Ignora zonas `BLOCKED`
+- Devolve a lista de zonas do caminho mais curto
+
+`k_paths.py` — Yen's algorithm para encontrar os K caminhos mais curtos:
+- Necessário para distribuir drones por múltiplos caminhos em paralelo
+- Baseia-se no Dijkstra como subrotina
+
+`router.py` — distribui drones pelos K caminhos:
+- Atribui um caminho a cada drone
+- Objetivo: minimizar o número de turnos totais
+
+**Questões de design a decidir antes de implementar:**
+- O Dijkstra devolve `List[Zone]` ou um objeto `Path`?
+- Como representar o custo de zonas `restricted` (2 turnos)?
+- O router atribui caminhos estaticamente (antes da simulação) ou dinamicamente (turno a turno)?
 
 ---
 
-### Fase 3 — Por iniciar
+### Fase 3 — Simulação ← por iniciar
 
 ```
 src/simulation/
 ├── __init__.py
-├── engine.py       ← motor de turnos
-├── turn.py         ← representa um turno com os movimentos
-├── scheduler.py    ← resolve conflitos de capacidade
-└── output.py       ← formata "D1-roof1 D2-corridorA"
+├── engine.py
+├── turn.py
+├── scheduler.py
+└── output.py
 ```
-
-O engine vai criar um `Drone` por cada drone do mapa, atribuir caminhos via router, e simular turno a turno respeitando `max_drones` e `max_link_capacity`.
 
 ---
 
-### Fase 4 — Por iniciar
+### Fase 4 — Renderer ← por iniciar
 
 ```
 src/renderer/
 ├── __init__.py
-├── base_renderer.py      ← ABC com interface comum
-├── terminal_renderer.py  ← colorama/rich
-└── graphic_renderer.py   ← pygame/tkinter (opcional)
+├── base_renderer.py
+├── terminal_renderer.py
+└── graphic_renderer.py
 ```
 
 ---
