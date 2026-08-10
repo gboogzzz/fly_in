@@ -78,3 +78,11 @@ class Graph:
     @property
     def connection_count(self) -> int:
         return len(self._connections)
+    
+    @property
+    def zones(self) -> List[Zone]:
+        return list(self._zones.values())
+
+    @property
+    def connections(self) -> List[Connection]:
+        return list(self._connections)

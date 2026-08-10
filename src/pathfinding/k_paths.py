@@ -19,8 +19,8 @@ class KPaths:
                 graph_copy = copy.deepcopy(graph)
                 for path in A:
                     if path[0:i+1] == root_path and len(path) > i+1:
-                        zones_to_block = path[i+1]
-                        zone_in_copy = graph_copy.get_zone(zone.name)
+                        zone_to_block = path[i+1]
+                        zone_in_copy = graph_copy.get_zone(zone_to_block.name)
                         zone_in_copy.zone_type = ZoneType.BLOCKED
                 for node in root_path[:-1]:
                     if node == spur_node:
@@ -44,5 +44,13 @@ class KPaths:
             A.append(best)
         
         return A
+    
+
+    @staticmethod
+    def _path_cost(path: List[Zone]) -> int:
+        total = 0
+        for zone in path[1:]:
+            total += zone.zone_type.movement_cost()
+        return total
 
 

@@ -33,3 +33,11 @@ class Drone:
 
     def __repr__(self) -> str:
         return f"{self.label}@{self.current_zone.name}[{self.state.value}]"
+    
+    def __hash__(self) -> int:
+        return hash(self.drone_id)
+
+    def __eq__(self, other: object) -> bool:
+        if not isinstance(other, Drone):
+            return NotImplemented
+        return self.drone_id == other.drone_id

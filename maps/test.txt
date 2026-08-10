@@ -1,0 +1,15 @@
+nb_drones: 4
+
+start_hub: start 0 0
+end_hub: end 8 0
+hub: roof1 2 2 [zone=priority]
+hub: roof2 2 -2 [zone=normal]
+hub: gate 5 2 [zone=restricted]
+hub: mid 5 -2 [zone=normal max_drones=2]
+
+connection: start-roof1
+connection: start-roof2
+connection: roof1-gate
+connection: roof2-mid
+connection: gate-end
+connection: mid-end

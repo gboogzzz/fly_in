@@ -1,4 +1,4 @@
-from ..models import Graph, Zone, Connection,  ZoneNotFoundError, DuplicateConnectionError
+from ..models import Graph, Zone, Connection,  ZoneNotFoundError, DuplicateConnectionError, ZoneType
 from typing import Optional
 
 
@@ -104,7 +104,9 @@ class MapParser:
                     raise ParseError(line_number, "max_drones must be positive")
             except ValueError:
                 raise ParseError(line_number, "max_drones needs to be an intenger")
-        zone = Zone(name, x, y, extra_parsed.get("zone", "normal"), max_drones, color, is_start, is_end)
+        zone_type_str = extra_parsed.get("zone", "normal")
+        zone_type = ZoneType.from_string(zone_type_str)
+        zone = Zone(name, x, y, zone_type, max_drones, color, is_start, is_end)
         try:
             graph.add_zone(zone)
         except ValueError:
@@ -118,7 +120,7 @@ class MapParser:
         extra = None
         if "[" in value:
             meta_data = value.split("[", 1)
-            data = meta_data[0]
+            data = meta_data[0].strip()
             extra = meta_data[1]
             name1 = data.split("-")[0]
             name2 = data.split("-")[1]
