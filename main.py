@@ -8,6 +8,7 @@ from src.renderer.graphic_renderer import GraphicRenderer
 
 MAP_PATH = "maps/42maps/challenger/01_the_impossible_dream.txt"
 
+
 def main() -> None:
     try:
         graph, nb_drones = MapParser.parse(MAP_PATH)
@@ -22,7 +23,9 @@ def main() -> None:
         for line in lines:
             print(line)
 
-        renderer = GraphicRenderer(graph, turns_log, drone_image_path="assets/drone.png")
+        renderer = GraphicRenderer(
+            graph, turns_log, drone_image_path="assets/drone.png"
+        )
         renderer.run()
     except ParseError as error:
         print(f"Error while parsing the map: {error}")

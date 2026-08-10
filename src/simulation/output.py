@@ -15,7 +15,5 @@ class OutputFormatter:
                 parts.append(f"{drone.label}-{destiny}")
             line = " ".join(parts)
             lines.append(line)
-            
-        return lines
-        
 
+        return lines

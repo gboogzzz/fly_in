@@ -53,7 +53,9 @@ class GraphicRenderer:
     ) -> None:
         self.graph: Graph = graph
         self.turns_log: List[Dict[Drone, str]] = turns_log
-        self.positions: Dict[str, Tuple[int, int]] = self._compute_positions()
+        self.positions: Dict[str, Tuple[int, int]] = (
+            self._compute_positions()
+        )
 
         self.background: Optional[pygame.Surface] = self._load_image(
             background_path, (self._WIDTH, self._HEIGHT)
@@ -108,17 +110,23 @@ class GraphicRenderer:
 
         return positions
 
-    def _compute_all_snapshots(self) -> List[Dict[Drone, Tuple[float, float]]]:
+    def _compute_all_snapshots(
+        self,
+    ) -> List[Dict[Drone, Tuple[float, float]]]:
         start_pos = self.positions[self.graph.start_zone.name]
-        all_drones = {drone for movements in self.turns_log for drone in movements}
-        current: Dict[Drone, Tuple[float, float]] = {drone: start_pos for drone in all_drones}
+        all_drones = {
+            drone for movements in self.turns_log for drone in movements
+        }
+        current: Dict[Drone, Tuple[float, float]] = {
+            drone: start_pos for drone in all_drones
+        }
         snapshots: List[Dict[Drone, Tuple[float, float]]] = [dict(current)]
-    
+
         for movements in self.turns_log:
             for drone, destination in movements.items():
                 current[drone] = self._resolve_position(destination)
             snapshots.append(dict(current))
-    
+
         return snapshots
 
     def _resolve_position(self, destination: str) -> Tuple[float, float]:
@@ -180,13 +188,17 @@ class GraphicRenderer:
         for connection in self.graph.connections:
             x1, y1 = self.positions[connection.zone1.name]
             x2, y2 = self.positions[connection.zone2.name]
-            pygame.draw.line(self.screen, self._EDGE_COLOR, (x1, y1), (x2, y2), 2)
+            pygame.draw.line(
+                self.screen, self._EDGE_COLOR, (x1, y1), (x2, y2), 2
+            )
 
         for zone in self.graph.zones:
             x, y = self.positions[zone.name]
             color = self._zone_color(zone)
             pygame.draw.circle(self.screen, color, (x, y), self._ZONE_RADIUS)
-            pygame.draw.circle(self.screen, (0, 0, 0), (x, y), self._ZONE_RADIUS, 2)
+            pygame.draw.circle(
+                self.screen, (0, 0, 0), (x, y), self._ZONE_RADIUS, 2
+            )
             label = self.font.render(zone.name, True, self._TEXT_COLOR)
             self.screen.blit(
                 label, (x - label.get_width() // 2, y + self._ZONE_RADIUS + 4)
@@ -205,14 +217,20 @@ class GraphicRenderer:
                 self.screen.blit(self.drone_image, rect)
             else:
                 pygame.draw.circle(
-                    self.screen, self._DRONE_COLOR, (int(x), int(y)), self._DRONE_RADIUS
+                    self.screen,
+                    self._DRONE_COLOR,
+                    (int(x), int(y)),
+                    self._DRONE_RADIUS,
                 )
                 label = self.font.render(drone.label, True, (255, 255, 0))
                 self.screen.blit(label, (x + 8, y - 8))
 
     def _draw_header(self) -> None:
         total = len(self.turns_log)
-        text = f"Turn {self.current_turn}/{total}  (SPACE/-> next, <- prev, ESC/Q quit)"
+        text = (
+            f"Turn {self.current_turn}/{total}  "
+            "(SPACE/-> next, <- prev, ESC/Q quit)"
+        )
         header = self.big_font.render(text, True, self._TEXT_COLOR)
         self.screen.blit(header, (10, 10))
 

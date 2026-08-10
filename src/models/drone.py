@@ -33,7 +33,7 @@ class Drone:
 
     def __repr__(self) -> str:
         return f"{self.label}@{self.current_zone.name}[{self.state.value}]"
-    
+
     def __hash__(self) -> int:
         return hash(self.drone_id)
 

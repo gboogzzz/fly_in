@@ -1,0 +1,4 @@
+pygame-ce
+flake8
+mypy
+pytest
