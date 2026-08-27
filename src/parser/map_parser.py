@@ -20,14 +20,25 @@ class MapParser:
         graph = Graph()
         nb_drones: Optional[int] = None
 
-        with open(path) as f:
+        try:
+            f = open(path)
+        except OSError as e:
+            raise ParseError(0, f"could not open file '{path}': {e}")
+
+        with f:
             for line_number, line in enumerate(f, start=1):
                 line = line.strip()
                 if not line or line.startswith("#"):
                     continue
+
                 parts = line.split(":", 1)
-                key = parts[0]
-                value = parts[1]
+                if len(parts) != 2:
+                    raise ParseError(
+                        line_number, f"missing ':' separator in '{line}'"
+                    )
+                key, value = parts
+                key = key.strip()
+
                 if key == "nb_drones":
                     nb_drones = MapParser._parse_nb_drones(
                         value, line_number
@@ -45,7 +56,7 @@ class MapParser:
                 elif key == "connection":
                     MapParser._parse_connection(value, graph, line_number)
                 else:
-                    raise ParseError(line_number, "unknown prefix: ...")
+                    raise ParseError(line_number, f"unknown prefix: '{key}'")
 
         if nb_drones is None:
             raise ParseError(0, "nb_drones not defined")
@@ -67,7 +78,7 @@ class MapParser:
             nb_drones = int(value)
         except ValueError:
             raise ParseError(
-                line_number, "nb_drones needs to be an intenger"
+                line_number, "nb_drones needs to be an integer"
             )
         if nb_drones <= 0:
             raise ParseError(
@@ -86,30 +97,34 @@ class MapParser:
         value = value.strip()
         color = None
         max_drones = 1
-        extra = None
+        extra: Optional[str] = None
         extra_parsed: dict[str, str] = {}
+
         if "[" in value:
             meta_data = value.split("[", 1)
-            data = meta_data[0]
-            data = data.strip()
+            data = meta_data[0].strip()
             extra = meta_data[1]
-            name = data.split(" ", 1)[0]
-            x_str = data.split(" ", 2)[1]
-            y_str = data.split(" ", 2)[2]
+            if not extra.endswith("]"):
+                raise ParseError(line_number, "missing closing ']'")
+            tokens = data.split(" ", 2)
         else:
-            meta_data = value.split(" ", 2)
-            name = meta_data[0]
-            x_str = meta_data[1]
-            y_str = meta_data[2]
+            tokens = value.split(" ", 2)
+
+        if len(tokens) < 3:
+            raise ParseError(line_number, "expected '<name> <x> <y>'")
+        name, x_str, y_str = tokens
+
         if not name or not x_str or not y_str:
             raise ParseError(line_number, "invalid zone")
-        if " " in name or "-" in name:
+        if "-" in name:
             raise ParseError(line_number, "name cant have '-' or ' '")
+
         try:
             x = int(x_str)
             y = int(y_str)
         except ValueError:
             raise ParseError(line_number, "invalid coords")
+
         if extra:
             extra_parsed = MapParser._parse_meta_data(extra, line_number)
             types = ["normal", "blocked", "restricted", "priority"]
@@ -117,19 +132,26 @@ class MapParser:
                 raise ParseError(line_number, "zone_type invalid")
             color = extra_parsed.get("color")
             try:
-                max_drones_str = extra_parsed.get("max_drones", "1")
-                max_drones = int(max_drones_str)
-                if max_drones <= 0:
-                    raise ParseError(
-                        line_number, "max_drones must be positive"
-                    )
+                max_drones = int(extra_parsed.get("max_drones", "1"))
             except ValueError:
                 raise ParseError(
-                    line_number, "max_drones needs to be an intenger"
+                    line_number, "max_drones needs to be an integer"
                 )
+            if max_drones <= 0:
+                raise ParseError(
+                    line_number, "max_drones must be positive"
+                )
+
         zone_type_str = extra_parsed.get("zone", "normal")
         zone_type = ZoneType.from_string(zone_type_str)
-        zone = Zone(name, x, y, zone_type, max_drones, color, is_start, is_end)
+
+        try:
+            zone = Zone(
+                name, x, y, zone_type, max_drones, color, is_start, is_end
+            )
+        except ValueError as e:
+            raise ParseError(line_number, str(e))
+
         try:
             graph.add_zone(zone)
         except ValueError:
@@ -139,18 +161,25 @@ class MapParser:
     def _parse_connection(value: str, graph: Graph, line_number: int) -> None:
         value = value.strip()
         max_link_capacity = 1
-        extra = None
+        extra: Optional[str] = None
+
         if "[" in value:
             meta_data = value.split("[", 1)
             data = meta_data[0].strip()
             extra = meta_data[1]
-            name1 = data.split("-")[0]
-            name2 = data.split("-")[1]
+            if not extra.endswith("]"):
+                raise ParseError(line_number, "missing closing ']'")
         else:
-            name1 = value.split("-")[0]
-            name2 = value.split("-")[1]
+            data = value
+
+        parts = data.split("-")
+        if len(parts) != 2:
+            raise ParseError(line_number, "expected '<zone1>-<zone2>'")
+        name1, name2 = parts
+
         if not name1 or not name2:
             raise ParseError(line_number, "mal formed zone")
+
         try:
             zone1 = graph.get_zone(name1)
         except ZoneNotFoundError:
@@ -159,22 +188,23 @@ class MapParser:
             zone2 = graph.get_zone(name2)
         except ZoneNotFoundError:
             raise ParseError(line_number, "unknown zone")
+
         if extra:
             extra_parsed = MapParser._parse_meta_data(extra, line_number)
-            max_link_capacity_str = extra_parsed.get("max_link_capacity", "1")
             try:
-                max_link_capacity = int(max_link_capacity_str)
-                if max_link_capacity <= 0:
-                    raise ParseError(
-                        line_number,
-                        "max_link_capacity needs to be an positive intenger",
-                    )
+                max_link_capacity = int(
+                    extra_parsed.get("max_link_capacity", "1")
+                )
             except ValueError:
                 raise ParseError(
-                    line_number, "max_link_capacity needs to be an intenger"
+                    line_number, "max_link_capacity needs to be an integer"
                 )
-        if graph.get_connection(zone1, zone2) is not None:
-            raise ParseError(line_number, "connection already exists")
+            if max_link_capacity <= 0:
+                raise ParseError(
+                    line_number,
+                    "max_link_capacity needs to be a positive integer",
+                )
+
         connection = Connection(zone1, zone2, max_link_capacity)
         try:
             graph.add_connection(connection)
