@@ -1,6 +1,11 @@
 from typing import Dict, List, Tuple, Optional, Set
+
 from ..models import Graph, Drone, Zone, DroneState, ZoneType, Connection
 from .scheduler import Scheduler
+
+
+class SimulationDeadlockError(RuntimeError):
+    pass
 
 
 class TurnEngine:
@@ -18,6 +23,11 @@ class TurnEngine:
 
         while not all(d.state == DroneState.ARRIVED for d in self.drones):
             movements = self._process_turn(turn)
+            if not movements and not self.in_transit:
+                raise SimulationDeadlockError(
+                    f"simulation deadlocked at turn {turn}: no drone can "
+                    "move and none are in transit"
+                )
             turns_log.append(movements)
             turn += 1
 
@@ -57,19 +67,28 @@ class TurnEngine:
                 )
             if next_zone.zone_type == ZoneType.RESTRICTED:
                 arrival_turn = turn + 1
+                # The connection is occupied for the whole transit (both
+                # turns), and the destination zone slot is claimed now,
+                # ahead of time, so the drone is guaranteed a place when
+                # it lands - it can't "wait" once committed to a transit.
                 can_reserve = (
                     self.scheduler.can_reserve_connection(
                         next_connection, turn
                     )
-                    and self.scheduler.can_reserve_zone(
-                        next_zone, arrival_turn
+                    and self.scheduler.can_reserve_connection(
+                        next_connection, arrival_turn
                     )
+                    and self.scheduler.can_reserve_zone(next_zone)
                 )
                 if can_reserve:
                     self.scheduler.reserve_connection(
                         next_connection, turn
                     )
-                    self.scheduler.reserve_zone(next_zone, arrival_turn)
+                    self.scheduler.reserve_connection(
+                        next_connection, arrival_turn
+                    )
+                    self.scheduler.release_zone(drone.current_zone)
+                    self.scheduler.occupy_zone(next_zone)
 
                     self.in_transit[drone] = (
                         next_connection, next_zone, arrival_turn
@@ -80,11 +99,12 @@ class TurnEngine:
                     self.scheduler.can_reserve_connection(
                         next_connection, turn
                     )
-                    and self.scheduler.can_reserve_zone(next_zone, turn)
+                    and self.scheduler.can_reserve_zone(next_zone)
                 )
                 if can_reserve:
                     self.scheduler.reserve_connection(next_connection, turn)
-                    self.scheduler.reserve_zone(next_zone, turn)
+                    self.scheduler.release_zone(drone.current_zone)
+                    self.scheduler.occupy_zone(next_zone)
 
                     drone.current_zone = next_zone
                     movements[drone] = next_zone.name

@@ -19,22 +19,24 @@ class KPaths:
             for i, spur_node in enumerate(last_path[:-1]):
                 root_path = last_path[0:i + 1]
                 graph_copy = copy.deepcopy(graph)
+                spur_in_copy = graph_copy.get_zone(spur_node.name)
+
                 for path in A:
                     if path[0:i + 1] == root_path and len(path) > i + 1:
-                        zone_to_block = path[i + 1]
-                        zone_in_copy = graph_copy.get_zone(
-                            zone_to_block.name
+                        next_in_copy = graph_copy.get_zone(
+                            path[i + 1].name
                         )
-                        zone_in_copy.zone_type = ZoneType.BLOCKED
+                        graph_copy.remove_neighbor(
+                            spur_in_copy, next_in_copy
+                        )
+
                 for node in root_path[:-1]:
-                    if node == spur_node:
-                        continue
                     zone = graph_copy.get_zone(node.name)
                     zone.zone_type = ZoneType.BLOCKED
+
                 try:
-                    spur_node_copy = graph_copy.get_zone(spur_node.name)
                     spur_path = Dijkstra.find_path(
-                        graph_copy, spur_node_copy, end
+                        graph_copy, spur_in_copy, end
                     )
 
                     candidate = root_path[:-1] + spur_path

@@ -57,6 +57,9 @@ class GraphicRenderer:
             self._compute_positions()
         )
 
+        pygame.init()
+        self.screen = pygame.display.set_mode((self._WIDTH, self._HEIGHT))
+
         self.background: Optional[pygame.Surface] = self._load_image(
             background_path, (self._WIDTH, self._HEIGHT)
         )
@@ -73,8 +76,6 @@ class GraphicRenderer:
         self.anim_to: Dict[Drone, Tuple[float, float]] = self.snapshots[0]
         self.time_since_last_advance: float = 0.0
 
-        pygame.init()
-        self.screen = pygame.display.set_mode((self._WIDTH, self._HEIGHT))
         pygame.display.set_caption("fly_in - simulation viewer")
         self.font = pygame.font.SysFont("consolas", 16)
         self.big_font = pygame.font.SysFont("consolas", 22, bold=True)

@@ -17,7 +17,7 @@ class Router:
             path = paths[index]
             for _ in range(count):
                 drone = Drone(
-                    drone_id=drone_id, current_zone=start, path=path
+                    drone_id=drone_id, current_zone=start, path=list(path)
                 )
                 result[drone] = path
                 drone_id += 1

@@ -19,6 +19,8 @@ class MapParser:
     def parse(path: str) -> tuple[Graph, int]:
         graph = Graph()
         nb_drones: Optional[int] = None
+        has_start = False
+        has_end = False
 
         try:
             f = open(path)
@@ -39,15 +41,35 @@ class MapParser:
                 key, value = parts
                 key = key.strip()
 
+                if key != "nb_drones" and nb_drones is None:
+                    raise ParseError(
+                        line_number,
+                        "the first line must define 'nb_drones'",
+                    )
+
                 if key == "nb_drones":
+                    if nb_drones is not None:
+                        raise ParseError(
+                            line_number, "nb_drones defined more than once"
+                        )
                     nb_drones = MapParser._parse_nb_drones(
                         value, line_number
                     )
                 elif key == "start_hub":
+                    if has_start:
+                        raise ParseError(
+                            line_number, "start_hub defined more than once"
+                        )
+                    has_start = True
                     MapParser._parse_zone(
                         value, graph, line_number, is_start=True
                     )
                 elif key == "end_hub":
+                    if has_end:
+                        raise ParseError(
+                            line_number, "end_hub defined more than once"
+                        )
+                    has_end = True
                     MapParser._parse_zone(
                         value, graph, line_number, is_end=True
                     )
@@ -60,13 +82,9 @@ class MapParser:
 
         if nb_drones is None:
             raise ParseError(0, "nb_drones not defined")
-        try:
-            graph.start_zone
-        except ValueError:
+        if not has_start:
             raise ParseError(0, "start_hub not defined")
-        try:
-            graph.end_zone
-        except ValueError:
+        if not has_end:
             raise ParseError(0, "end_hub not defined")
 
         return (graph, nb_drones)
@@ -127,9 +145,6 @@ class MapParser:
 
         if extra:
             extra_parsed = MapParser._parse_meta_data(extra, line_number)
-            types = ["normal", "blocked", "restricted", "priority"]
-            if extra_parsed.get("zone", "normal") not in types:
-                raise ParseError(line_number, "zone_type invalid")
             color = extra_parsed.get("color")
             try:
                 max_drones = int(extra_parsed.get("max_drones", "1"))
@@ -143,7 +158,12 @@ class MapParser:
                 )
 
         zone_type_str = extra_parsed.get("zone", "normal")
-        zone_type = ZoneType.from_string(zone_type_str)
+        try:
+            zone_type = ZoneType(zone_type_str)
+        except ValueError:
+            raise ParseError(
+                line_number, f"invalid zone type '{zone_type_str}'"
+            )
 
         try:
             zone = Zone(
@@ -183,11 +203,11 @@ class MapParser:
         try:
             zone1 = graph.get_zone(name1)
         except ZoneNotFoundError:
-            raise ParseError(line_number, "unknown zone")
+            raise ParseError(line_number, f"unknown zone '{name1}'")
         try:
             zone2 = graph.get_zone(name2)
         except ZoneNotFoundError:
-            raise ParseError(line_number, "unknown zone")
+            raise ParseError(line_number, f"unknown zone '{name2}'")
 
         if extra:
             extra_parsed = MapParser._parse_meta_data(extra, line_number)
@@ -205,23 +225,27 @@ class MapParser:
                     "max_link_capacity needs to be a positive integer",
                 )
 
-        connection = Connection(zone1, zone2, max_link_capacity)
+        try:
+            connection = Connection(zone1, zone2, max_link_capacity)
+        except ValueError as e:
+            raise ParseError(line_number, str(e))
+
         try:
             graph.add_connection(connection)
+        except DuplicateConnectionError:
+            raise ParseError(line_number, "cant have duplicate connections")
         except ValueError:
             raise ParseError(
                 line_number, "one of the zones weren't added to the graph"
             )
-        except DuplicateConnectionError:
-            raise ParseError(line_number, "cant have duplicate connections")
 
     @staticmethod
     def _parse_meta_data(
         metadata_str: str, line_number: int
     ) -> dict[str, str]:
         metadata_str = metadata_str.strip("[]")
-        meta_data = metadata_str.split(" ")
-        parsed_data = {}
+        meta_data = metadata_str.split()
+        parsed_data: dict[str, str] = {}
         for data in meta_data:
             temp = data.split("=", 1)
             if len(temp) < 2:

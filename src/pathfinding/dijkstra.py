@@ -56,7 +56,7 @@ class Dijkstra:
     def _reconstruct_path(
         previous: Dict[Zone, Optional[Zone]], start: Zone, end: Zone
     ) -> List[Zone]:
-        if end not in previous and end != start:
+        if end not in previous:
             raise PathNotFoundError(start, end)
         path = [end]
         actual = end
