@@ -1,3 +1,10 @@
+"""Map file parser for the Fly-in drone routing simulation.
+
+Reads a map file and builds the corresponding Graph and the number of
+drones. Every error found while parsing is reported as a ParseError that
+contains the line number and the cause.
+"""
+
 from typing import Optional
 from ..models import (
     Graph,
@@ -10,13 +17,50 @@ from ..models import (
 
 
 class ParseError(Exception):
+    """Raised when the map file is invalid.
+
+    The message always follows the format ``Error on line N: <cause>``.
+    Errors that do not belong to a specific line (e.g. a missing
+    ``start_hub`` or an unreadable file) use line number 0.
+    """
+
     def __init__(self, line_number: int, message: str):
+        """Build the error with the line number and the cause.
+
+        Args:
+            line_number: Line of the map file where the error was found,
+                or 0 if it does not belong to a specific line.
+            message: Description of the cause of the error.
+        """
         super().__init__(f"Error on line {line_number}: {message}")
 
 
 class MapParser:
+    """Parser that converts a map file into a Graph.
+
+    All methods are static because the parser keeps no state between
+    calls: the graph and the number of drones are local to each parse.
+    """
+
     @staticmethod
     def parse(path: str) -> tuple[Graph, int]:
+        """Parse a map file.
+
+        The file is read line by line. Empty lines and comments (lines
+        starting with ``#``) are ignored. The first meaningful line must
+        define ``nb_drones``, and there must be exactly one ``start_hub``
+        and one ``end_hub``.
+
+        Args:
+            path: Path to the map file.
+
+        Returns:
+            A tuple with the built graph and the number of drones.
+
+        Raises:
+            ParseError: If the file cannot be opened, or if any line or
+                the overall structure of the file is invalid.
+        """
         graph = Graph()
         nb_drones: Optional[int] = None
         has_start = False
@@ -91,6 +135,18 @@ class MapParser:
 
     @staticmethod
     def _parse_nb_drones(value: str, line_number: int) -> int:
+        """Parse the value of the ``nb_drones`` line.
+
+        Args:
+            value: Text after ``nb_drones:``.
+            line_number: Line number, used in error messages.
+
+        Returns:
+            The number of drones.
+
+        Raises:
+            ParseError: If the value is not an integer or is not positive.
+        """
         value = value.strip()
         try:
             nb_drones = int(value)
@@ -112,6 +168,24 @@ class MapParser:
         is_start: bool = False,
         is_end: bool = False,
     ) -> None:
+        """Parse a zone line and add the zone to the graph.
+
+        The expected format is ``<name> <x> <y> [metadata]``, where the
+        metadata block is optional and may contain ``zone``, ``color``
+        and ``max_drones``. The name, x and y are split on single spaces.
+
+        Args:
+            value: Text after ``hub:``, ``start_hub:`` or ``end_hub:``.
+            graph: Graph where the zone is added.
+            line_number: Line number, used in error messages.
+            is_start: True if the zone is the start zone.
+            is_end: True if the zone is the end zone.
+
+        Raises:
+            ParseError: If the format, the coordinates, the metadata, the
+                zone type or the capacity are invalid, or if a zone with
+                the same name already exists.
+        """
         value = value.strip()
         color = None
         max_drones = 1
@@ -144,7 +218,9 @@ class MapParser:
             raise ParseError(line_number, "invalid coords")
 
         if extra:
-            extra_parsed = MapParser._parse_meta_data(extra, line_number)
+            extra_parsed = MapParser._parse_meta_data(
+                extra, line_number, {"zone", "color", "max_drones"}
+            )
             color = extra_parsed.get("color")
             try:
                 max_drones = int(extra_parsed.get("max_drones", "1"))
@@ -179,6 +255,23 @@ class MapParser:
 
     @staticmethod
     def _parse_connection(value: str, graph: Graph, line_number: int) -> None:
+        """Parse a connection line and add the connection to the graph.
+
+        The expected format is ``<zone1>-<zone2> [metadata]``, where the
+        metadata block is optional and may contain ``max_link_capacity``.
+        Both zones must have been defined on previous lines.
+
+        Args:
+            value: Text after ``connection:``.
+            graph: Graph where the connection is added.
+            line_number: Line number, used in error messages.
+
+        Raises:
+            ParseError: If the format or the metadata are invalid, if a
+                zone is unknown, if the capacity is not a positive
+                integer, if the zone is connected to itself, or if the
+                connection is a duplicate (in either direction).
+        """
         value = value.strip()
         max_link_capacity = 1
         extra: Optional[str] = None
@@ -210,7 +303,9 @@ class MapParser:
             raise ParseError(line_number, f"unknown zone '{name2}'")
 
         if extra:
-            extra_parsed = MapParser._parse_meta_data(extra, line_number)
+            extra_parsed = MapParser._parse_meta_data(
+                extra, line_number, {"max_link_capacity"}
+            )
             try:
                 max_link_capacity = int(
                     extra_parsed.get("max_link_capacity", "1")
@@ -241,8 +336,26 @@ class MapParser:
 
     @staticmethod
     def _parse_meta_data(
-        metadata_str: str, line_number: int
+        metadata_str: str, line_number: int, allowed: set[str]
     ) -> dict[str, str]:
+        """Parse a metadata block into a dictionary.
+
+        Converts text such as ``zone=restricted color=red]`` into
+        ``{"zone": "restricted", "color": "red"}``. Values are returned
+        as strings and must be converted by the caller.
+
+        Args:
+            metadata_str: Text of the metadata block, after the ``[``.
+            line_number: Line number, used in error messages.
+            allowed: Set of metadata keys accepted in this context.
+
+        Returns:
+            Dictionary mapping each metadata key to its value.
+
+        Raises:
+            ParseError: If a tag has no ``=``, if a key is not in
+                ``allowed``, or if a key appears more than once.
+        """
         metadata_str = metadata_str.strip("[]")
         meta_data = metadata_str.split()
         parsed_data: dict[str, str] = {}
@@ -250,7 +363,15 @@ class MapParser:
             temp = data.split("=", 1)
             if len(temp) < 2:
                 raise ParseError(line_number, "mal formed meta data")
-            key = temp[0]
-            parsed_data[key] = temp[1]
+            key, value = temp
+            if key not in allowed:
+                raise ParseError(
+                    line_number,
+                    f"unknown metadata '{key}' "
+                    f"(allowed: {', '.join(sorted(allowed))})",
+                )
+            if key in parsed_data:
+                raise ParseError(line_number, f"duplicate metadata '{key}'")
+            parsed_data[key] = value
 
         return parsed_data

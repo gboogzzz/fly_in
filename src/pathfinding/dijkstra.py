@@ -1,10 +1,15 @@
+"""Dijkstra shortest path search for the Fly-in drone routing project."""
+
 import heapq
 from typing import Dict, List, Optional, Tuple
 from ..models import Graph, Zone, ZoneType
 
 
 class PathNotFoundError(Exception):
+    """Raised when the end zone cannot be reached from the start zone."""
+
     def __init__(self, start: Zone, end: Zone) -> None:
+        """Store the start and end zones and build the error message."""
         self.start = start
         self.end = end
         super().__init__(
@@ -13,8 +18,15 @@ class PathNotFoundError(Exception):
 
 
 class Dijkstra:
+    """Finds the lowest cost path between two zones."""
+
     @staticmethod
     def find_path(graph: Graph, start: Zone, end: Zone) -> List[Zone]:
+        """Return the cheapest path from start to end, both included.
+
+        Raises:
+            PathNotFoundError: If end cannot be reached from start.
+        """
         _, previous = Dijkstra._compute_distances(graph, start, end)
 
         return Dijkstra._reconstruct_path(previous, start, end)
@@ -23,6 +35,16 @@ class Dijkstra:
     def _compute_distances(
         graph: Graph, start: Zone, end: Zone
     ) -> Tuple[Dict[Zone, int], Dict[Zone, Optional[Zone]]]:
+        """Compute the lowest cost and the previous zone for each zone.
+
+        Queue entries are (cost, name, counter, zone): the name makes ties
+        deterministic and the counter avoids comparing two zones.
+        Stops when the end zone leaves the queue.
+
+        Returns:
+            A tuple (distances, previous) with the lowest known cost to
+            each discovered zone and the zone it was reached from.
+        """
         distances: Dict[Zone, int] = {start: 0}
         previous: Dict[Zone, Optional[Zone]] = {}
         counter = 0
@@ -56,6 +78,11 @@ class Dijkstra:
     def _reconstruct_path(
         previous: Dict[Zone, Optional[Zone]], start: Zone, end: Zone
     ) -> List[Zone]:
+        """Walk back from end to start through previous and reverse it.
+
+        Raises:
+            PathNotFoundError: If end was never reached.
+        """
         if end not in previous:
             raise PathNotFoundError(start, end)
         path = [end]
