@@ -1,14 +1,28 @@
+"""K shortest paths search (Yen's algorithm) for the Fly-in project."""
+
 import copy
-from typing import List
+from typing import List, Tuple
 from ..models import Graph, Zone, ZoneType
 from .dijkstra import Dijkstra, PathNotFoundError
 
 
 class KPaths:
+    """Finds several low cost paths between two zones."""
+
     @staticmethod
     def find_k_paths(
         graph: Graph, start: Zone, end: Zone, k: int
     ) -> List[List[Zone]]:
+        """Return up to k loopless paths from start to end, cheapest first.
+
+        Uses Yen's algorithm: for each node of the last accepted path, it
+        keeps the path up to that node and searches a new way to the end
+        on a graph copy, without the links already used from that node and
+        without the zones before it. The cheapest candidate is accepted.
+
+        Raises:
+            PathNotFoundError: If end cannot be reached from start.
+        """
         A: List[List[Zone]] = []   # acepted paths
         B: List[List[Zone]] = []   # candidates to chose
 
@@ -54,8 +68,16 @@ class KPaths:
         return A
 
     @staticmethod
-    def _path_cost(path: List[Zone]) -> int:
-        total = 0
+    def _path_cost(path: List[Zone]) -> Tuple[int, int]:
+        """Return the cost of a path as (turns, priority bonus).
+
+        The start zone is not counted, because the cost is paid when
+        entering a zone. A lower bonus means more priority zones.
+        """
+        turns = 0
+        bonus = 0
         for zone in path[1:]:
-            total += zone.zone_type.movement_cost()
-        return total
+            zone_turns, zone_bonus = Dijkstra.step_cost(zone)
+            turns += zone_turns
+            bonus += zone_bonus
+        return (turns, bonus)

@@ -32,9 +32,19 @@ class Dijkstra:
         return Dijkstra._reconstruct_path(previous, start, end)
 
     @staticmethod
+    def step_cost(zone: Zone) -> Tuple[int, int]:
+        """Return the cost of entering a zone as (turns, priority bonus).
+
+        The bonus is -1 for priority zones and 0 for the others, so a
+        lower total means more priority zones on the path.
+        """
+        bonus = -1 if zone.zone_type == ZoneType.PRIORITY else 0
+        return (zone.zone_type.movement_cost(), bonus)
+
+    @staticmethod
     def _compute_distances(
         graph: Graph, start: Zone, end: Zone
-    ) -> Tuple[Dict[Zone, int], Dict[Zone, Optional[Zone]]]:
+    ) -> Tuple[Dict[Zone, Tuple[int, int]], Dict[Zone, Optional[Zone]]]:
         """Compute the lowest cost and the previous zone for each zone.
 
         Queue entries are (cost, name, counter, zone): the name makes ties
@@ -45,31 +55,32 @@ class Dijkstra:
             A tuple (distances, previous) with the lowest known cost to
             each discovered zone and the zone it was reached from.
         """
-        distances: Dict[Zone, int] = {start: 0}
+        distances: Dict[Zone, Tuple[int, int]] = {start: (0, 0)}
         previous: Dict[Zone, Optional[Zone]] = {}
         counter = 0
-        queue: List[Tuple[int, str, int, Zone]] = []
-        heapq.heappush(queue, (0, start.name, counter, start))
+        queue: List[Tuple[Tuple[int, int], str, int, Zone]] = []
+        heapq.heappush(queue, ((0, 0), start.name, counter, start))
 
         while queue:
-            actual_distance, _, _, actual_zone = heapq.heappop(queue)
+            actual_cost, _, _, actual_zone = heapq.heappop(queue)
 
             if actual_zone.is_end:
                 break
-            if actual_distance > distances.get(actual_zone, float('inf')):
+            if actual_cost > distances.get(actual_zone):
                 continue
             for neighbour in graph.get_neighbors(actual_zone):
                 if neighbour.zone_type == ZoneType.BLOCKED:
                     continue
-                cost = neighbour.zone_type.movement_cost()
-                new_distance = actual_distance + cost
-                if new_distance < distances.get(neighbour, float('inf')):
-                    distances[neighbour] = new_distance
+                turns, bonus = Dijkstra.step_cost(neighbour)
+                new_cost = (actual_cost[0] + turns, actual_cost[1] + bonus)
+                known = distances.get(neighbour)
+                if known is None or new_cost < known:
+                    distances[neighbour] = new_cost
                     previous[neighbour] = actual_zone
                     counter += 1
                     heapq.heappush(
                         queue,
-                        (new_distance, neighbour.name, counter, neighbour),
+                        (new_cost, neighbour.name, counter, neighbour),
                     )
 
         return distances, previous
