@@ -37,6 +37,22 @@ class Router:
         return result
 
     @staticmethod
+    def _drop_opposite_paths(paths: List[List[Zone]]) -> List[List[Zone]]:
+        """Keep only paths that never cross a used link head-on."""
+        used: set[tuple[str, str]] = set()
+        kept: List[List[Zone]] = []
+        for path in paths:
+            edges = [
+                (path[i].name, path[i + 1].name)
+                for i in range(len(path) - 1)
+            ]
+            if any((b, a) in used for a, b in edges):
+                continue
+            used.update(edges)
+            kept.append(path)
+        return kept
+
+    @staticmethod
     def _find_sufficient_paths(
         graph: Graph, start: Zone, end: Zone, nb_drones: int
     ) -> List[List[Zone]]:
@@ -61,7 +77,7 @@ class Router:
             ]
             total_capacity = sum(capacities)
 
-        return paths
+        return Router._drop_opposite_paths(paths)
 
     @staticmethod
     def _path_capacity(graph: Graph, path: List[Zone]) -> int:

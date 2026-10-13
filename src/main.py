@@ -1,11 +1,11 @@
 import sys
 
-from src.parser.map_parser import MapParser, ParseError
-from src.pathfinding.router import Router
-from src.pathfinding.dijkstra import PathNotFoundError
-from src.simulation.engine import TurnEngine, SimulationDeadlockError
-from src.simulation.output import OutputFormatter
-from src.renderer.graphic_renderer import GraphicRenderer
+from .parser.map_parser import MapParser, ParseError
+from .pathfinding.router import Router
+from .pathfinding.dijkstra import PathNotFoundError
+from .simulation.engine import TurnEngine, SimulationDeadlockError
+from .simulation.output import OutputFormatter
+from .renderer.graphic_renderer import GraphicRenderer
 
 
 def main() -> None:

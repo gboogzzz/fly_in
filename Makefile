@@ -1,22 +1,28 @@
+VENV = .venv
+PYTHON = $(VENV)/bin/python3
+PIP = $(VENV)/bin/pip
+
 .PHONY: install run debug clean lint lint-strict
 
 install:
-	pip install -r requirements.txt
+	python3 -m venv $(VENV)
+	$(PIP) install --upgrade pip
+	$(PIP) install -r requirements.txt
 
 run:
-	python3 main.py $(MAP)
+	$(PYTHON) -m src.main $(MAP)
 
 debug:
-	python3 -m pdb main.py $(MAP)
+	$(PYTHON) -m pdb -m src.main $(MAP)
 
 clean:
-	find . -type d -name "__pycache__" -exec rm -rf {} +
+	find . -type d -name "__pycache__" -not -path "./$(VENV)/*" -exec rm -rf {} +
 	rm -rf .mypy_cache
 
 lint:
-	python3 -m flake8 .
-	python3 -m mypy . --warn-return-any --warn-unused-ignores --ignore-missing-imports --disallow-untyped-defs --check-untyped-defs
+	$(PYTHON) -m flake8 src
+	$(PYTHON) -m mypy src --warn-return-any --warn-unused-ignores --ignore-missing-imports --disallow-untyped-defs --check-untyped-defs
 
 lint-strict:
-	python3 -m flake8 .
-	python3 -m mypy . --strict
+	$(PYTHON) -m flake8 src
+	$(PYTHON) -m mypy src --strict

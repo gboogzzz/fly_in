@@ -1,3 +1,5 @@
+"""Turn by turn simulation engine for the Fly-in project."""
+
 from typing import Dict, List, Tuple, Optional, Set
 
 from ..models import Graph, Drone, Zone, DroneState, ZoneType, Connection
@@ -5,19 +7,41 @@ from .scheduler import Scheduler
 
 
 class SimulationDeadlockError(RuntimeError):
-    pass
+    """Raised when no drone can move and none is in transit."""
 
 
 class TurnEngine:
+    """Runs the simulation one turn at a time.
+
+    Attributes:
+        graph: The map graph.
+        scheduler: Keeps the zone and connection reservations.
+        drones: All the drones of the simulation.
+        in_transit: Drones travelling to a restricted zone, mapped to
+            (connection, destination zone, arrival turn).
+    """
+
     def __init__(
         self, graph: Graph, drone_paths: Dict[Drone, List[Zone]]
     ) -> None:
+        """Create the engine for a graph and the path of each drone."""
         self.graph = graph
         self.scheduler = Scheduler()
         self.drones = list(drone_paths.keys())
         self.in_transit: Dict[Drone, Tuple[Connection, Zone, int]] = {}
 
     def run(self) -> List[Dict[Drone, str]]:
+        """Run turns until every drone has arrived.
+
+        Returns:
+            One dict per turn, mapping each drone that moved to its
+            destination zone (or connection, when entering a
+            restricted zone).
+
+        Raises:
+            SimulationDeadlockError: If nobody can move and nobody is
+                in transit.
+        """
         turns_log: List[Dict[Drone, str]] = []
         turn = 1
 
@@ -34,6 +58,15 @@ class TurnEngine:
         return turns_log
 
     def _process_turn(self, turn: int) -> Dict[Drone, str]:
+        """Simulate one turn and return the movements made.
+
+        First lands the drones whose transit ends now, then tries to
+        move each remaining drone to its next zone. A drone that
+        cannot reserve the connection and the zone waits.
+
+        Raises:
+            ValueError: If two consecutive zones are not connected.
+        """
         movements: Dict[Drone, str] = {}
         arrived_this_turn: Set[Drone] = set()
 
@@ -114,6 +147,7 @@ class TurnEngine:
         return movements
 
     def _get_next_zone(self, drone: Drone) -> Optional[Zone]:
+        """Return the next zone in the drone path, or None at the end."""
         index = drone.path.index(drone.current_zone)
         if index + 1 >= len(drone.path):
             return None

@@ -1,3 +1,5 @@
+"""Pygame renderer to watch the Fly-in simulation turn by turn."""
+
 from typing import Dict, List, Optional, Tuple
 import pygame
 
@@ -5,10 +7,10 @@ from ..models import Graph, Drone, Zone, ZoneType
 
 
 class GraphicRenderer:
-    """Renderer gráfico básico, feito com pygame, para visualizar a
-    simulação turno a turno. Avança automaticamente, com a opção de
-    recuar/avançar manualmente um turno (setas esquerda/direita).
-    Fecha a janela ou prime ESC/Q para sair.
+    """Pygame viewer that shows the simulation turn by turn.
+
+    It advances automatically, and the left and right arrows go back and
+    forward one turn. Close the window or press ESC/Q to quit.
     """
 
     _WIDTH = 900
@@ -51,6 +53,14 @@ class GraphicRenderer:
         background_path: Optional[str] = None,
         drone_image_path: Optional[str] = None,
     ) -> None:
+        """Open the window and precompute the positions and snapshots.
+
+        Args:
+            graph: The map graph.
+            turns_log: The movements of each turn, from the engine.
+            background_path: Optional background image.
+            drone_image_path: Optional drone image.
+        """
         self.graph: Graph = graph
         self.turns_log: List[Dict[Drone, str]] = turns_log
         self.positions: Dict[str, Tuple[int, int]] = (
@@ -84,6 +94,7 @@ class GraphicRenderer:
     def _load_image(
         self, path: Optional[str], size: Tuple[int, int]
     ) -> Optional[pygame.Surface]:
+        """Load and resize an image, or return None if it fails."""
         if path is None:
             return None
         try:
@@ -93,6 +104,7 @@ class GraphicRenderer:
             return None
 
     def _compute_positions(self) -> Dict[str, Tuple[int, int]]:
+        """Map the zone coordinates to pixels inside the window."""
         zones = self.graph.zones
         xs = [zone.x for zone in zones]
         ys = [zone.y for zone in zones]
@@ -114,6 +126,7 @@ class GraphicRenderer:
     def _compute_all_snapshots(
         self,
     ) -> List[Dict[Drone, Tuple[float, float]]]:
+        """Return the drone positions at the start and after each turn."""
         start_pos = self.positions[self.graph.start_zone.name]
         all_drones = {
             drone for movements in self.turns_log for drone in movements
@@ -131,6 +144,11 @@ class GraphicRenderer:
         return snapshots
 
     def _resolve_position(self, destination: str) -> Tuple[float, float]:
+        """Return the pixel position of a zone or of a connection.
+
+        For a connection (such as ``A-B``) it is the middle point.
+        Falls back to the start zone if the destination is unknown.
+        """
         try:
             zone = self.graph.get_zone(destination)
             return self.positions[zone.name]
@@ -148,11 +166,13 @@ class GraphicRenderer:
             return self.positions[self.graph.start_zone.name]
 
     def _zone_color(self, zone: Zone) -> Tuple[int, int, int]:
+        """Return the metadata color of the zone, or its type color."""
         if zone.color and zone.color in self._NAMED_COLORS:
             return self._NAMED_COLORS[zone.color]
         return self._TYPE_COLORS.get(zone.zone_type, (150, 150, 150))
 
     def _advance_turn(self) -> None:
+        """Start the animation to the next turn, if there is one."""
         if self.current_turn >= len(self.turns_log):
             return
         self.anim_from = self.snapshots[self.current_turn]
@@ -162,6 +182,7 @@ class GraphicRenderer:
         self.time_since_last_advance = 0.0
 
     def _rewind_turn(self) -> None:
+        """Start the animation to the previous turn, if there is one."""
         if self.current_turn <= 0:
             return
         self.anim_from = self.snapshots[self.current_turn]
@@ -171,6 +192,7 @@ class GraphicRenderer:
         self.time_since_last_advance = 0.0
 
     def _update(self, dt: float) -> None:
+        """Advance the animation and the auto advance by dt seconds."""
         if self.anim_progress < 1.0:
             self.anim_progress = min(
                 self.anim_progress + dt / self._ANIMATION_DURATION, 1.0
@@ -180,12 +202,14 @@ class GraphicRenderer:
             self._advance_turn()
 
     def _draw_background(self) -> None:
+        """Draw the background image or fill the screen."""
         if self.background:
             self.screen.blit(self.background, (0, 0))
         else:
             self.screen.fill(self._BG_COLOR)
 
     def _draw_graph(self) -> None:
+        """Draw the connections, then the zones with their names."""
         for connection in self.graph.connections:
             x1, y1 = self.positions[connection.zone1.name]
             x2, y2 = self.positions[connection.zone2.name]
@@ -206,6 +230,7 @@ class GraphicRenderer:
             )
 
     def _draw_drones(self) -> None:
+        """Draw each drone between its previous and next positions."""
         for drone in self.anim_to:
             from_pos = self.anim_from.get(drone, self.anim_to[drone])
             to_pos = self.anim_to[drone]
@@ -227,6 +252,7 @@ class GraphicRenderer:
                 self.screen.blit(label, (x + 8, y - 8))
 
     def _draw_header(self) -> None:
+        """Draw the turn counter and the key help."""
         total = len(self.turns_log)
         text = (
             f"Turn {self.current_turn}/{total}  "
@@ -236,6 +262,7 @@ class GraphicRenderer:
         self.screen.blit(header, (10, 10))
 
     def run(self) -> None:
+        """Run the window loop until the user quits."""
         running = True
         while running:
             dt = self.clock.tick(60) / 1000.0
@@ -246,7 +273,7 @@ class GraphicRenderer:
                 if event.type == pygame.KEYDOWN:
                     if event.key in (pygame.K_ESCAPE, pygame.K_q):
                         running = False
-                    if event.key == pygame.K_RIGHT:
+                    if event.key in (pygame.K_RIGHT, pygame.K_SPACE):
                         self._advance_turn()
                     if event.key == pygame.K_LEFT:
                         self._rewind_turn()

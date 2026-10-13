@@ -66,7 +66,7 @@ class Dijkstra:
 
             if actual_zone.is_end:
                 break
-            if actual_cost > distances.get(actual_zone):
+            if actual_cost > distances[actual_zone]:
                 continue
             for neighbour in graph.get_neighbors(actual_zone):
                 if neighbour.zone_type == ZoneType.BLOCKED:
