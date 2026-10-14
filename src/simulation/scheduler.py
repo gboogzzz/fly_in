@@ -21,6 +21,12 @@ class Scheduler:
         self._zone_occupants: Dict[Zone, int] = {}
         self._connection_reservations: Dict[int, Dict[Connection, int]] = {}
 
+    def zone_usage(self) -> Dict[Zone, int]:
+        return dict(self._zone_occupants)
+
+    def connection_usage(self, turn: int) -> Dict[Connection, int]:
+        return dict(self._connection_reservations.get(turn, {}))
+    
     def can_reserve_zone(self, zone: Zone) -> bool:
         """Return True if the zone has room for one more drone."""
         if zone.is_start or zone.is_end:

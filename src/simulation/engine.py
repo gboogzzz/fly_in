@@ -29,6 +29,7 @@ class TurnEngine:
         self.scheduler = Scheduler()
         self.drones = list(drone_paths.keys())
         self.in_transit: Dict[Drone, Tuple[Connection, Zone, int]] = {}
+        self.capacity_log: List[Tuple[Dict[Zone, int], Dict[Connection, int]]] = []
 
     def run(self) -> List[Dict[Drone, str]]:
         """Run turns until every drone has arrived.
@@ -53,6 +54,7 @@ class TurnEngine:
                     "move and none are in transit"
                 )
             turns_log.append(movements)
+            self.capacity_log.append((self.scheduler.zone_usage(), self.scheduler.connection_usage(turn)))
             turn += 1
 
         return turns_log

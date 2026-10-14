@@ -10,7 +10,6 @@ from .renderer.graphic_renderer import GraphicRenderer
 
 def main() -> None:
     if len(sys.argv) != 2:
-        print(f"Usage: python3 {sys.argv[0]} <map_file>")
         sys.exit(1)
 
     map_path = sys.argv[1]
@@ -48,4 +47,7 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except KeyboardInterrupt:
+        print("User interrupted the program")
